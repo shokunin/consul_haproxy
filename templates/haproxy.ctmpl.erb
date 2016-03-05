@@ -1,0 +1,63 @@
+####################################################################################
+#   			Generate via Consul-Template
+####################################################################################
+global
+        log localhost    local1
+        log localhost    local1 notice
+        chroot /var/lib/haproxy
+        user haproxy
+        group haproxy
+        daemon
+
+defaults
+        log     global
+        mode    http
+        option  httplog
+        option  dontlognull
+
+        timeout connect 5000
+        timeout client 50000
+        timeout server 50000
+        timeout connect 5s
+        timeout client 2m
+        timeout server 3m
+
+        errorfile 400 /etc/haproxy/errors/400.http
+        errorfile 403 /etc/haproxy/errors/403.http
+        errorfile 408 /etc/haproxy/errors/408.http
+        errorfile 500 /etc/haproxy/errors/500.http
+        errorfile 502 /etc/haproxy/errors/502.http
+        errorfile 503 /etc/haproxy/errors/503.http
+        errorfile 504 /etc/haproxy/errors/504.http
+
+        unique-id-format %{+X}o\ %ci:%cp_%fi:%fp_%Ts_%rt:%pid
+	unique-id-header X-Unique-ID
+
+	log-format {\ "timestamp":\ %Ts,\ "http_status":\ %ST,\ "http_request":\ "%r",\ "remote_addr":\ "%ci",\ "bytes_read":\ %B,\ "upstream_addr":\ "%si",\ "backend_name":\ "%b",\ "retries":\ %rc,\ "bytes_uploaded":\ %U,\ "upstream_response_time":\ "%Tr",\ "upstream_connect_time":\ "%Tc",\ "session_duration":\ "%Tt",\ "termination_state":\ "%ts",\ "request_id":\ "%ID",\ "vhost":\ "%hr",\ "hostname":\ "%H",\ "client_send_time":\ %Tq,\ "fmt":\ "JSON"\ }
+
+frontend stats
+  bind :2112 
+  default_backend stats
+        
+frontend http
+        bind 0.0.0.0:<%= @port %>
+	capture request  header    Host                 len 500
+
+{{range services}}{{ if .Tags | contains "<%= @service_tag %>" }}
+	acl host_{{ .Name }} hdr_beg(host) -i {{ .Name }}.
+	use_backend {{ .Name }} if host_{{ .Name }}
+{{end}}{{end}}
+
+{{range services}}{{ if .Tags | contains "<%= @service_tag %>" }}
+backend {{ .Name }}
+	mode http
+        balance roundrobin
+	option httpchk HEAD / HTTP/1.0\r\nHost:\ {{ .Name }}.test\r\nUser-agent:\ HAPROXY-CHECK {{range service .Name}}
+        server {{.Node}} {{.Address}}:{{.Port}} check inter 5s rise 2 fall 2{{end}}
+{{end}}{{end}}
+
+backend stats
+    stats enable
+    stats realm Haproxy\ Statistics
+    stats uri /
+    stats auth stats:stats2
