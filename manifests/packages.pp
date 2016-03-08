@@ -13,7 +13,6 @@ class consul_haproxy::packages inherits consul_haproxy{
     repos      => 'main',
     key        => 'CFFB779AADC995E4F350A060505D97A41C61B9CD',
     key_server => 'pgp.mit.edu',
-    require    => Class['ubuntu_pkgs']
   }
 
   package { 'haproxy':
@@ -22,7 +21,7 @@ class consul_haproxy::packages inherits consul_haproxy{
   }
 
   staging::file { "consul-template-${version}.zip":
-    source  => $download_url
+    source  => $download_url,
     require => Class['ubuntu_pkgs']
   } ->
   staging::extract { "consul-template-${version}.zip":
